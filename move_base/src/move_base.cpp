@@ -910,10 +910,16 @@ namespace move_base {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
 
         if(tc_->computeVelocityCommands(cmd_vel)){
+
+          cmd_vel = VelocityThresholding(cmd_vel);
+
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
           //make sure that we send the velocity command to the base
+
+
+
           vel_pub_.publish(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
             recovery_index_ = 0;
@@ -1204,5 +1210,37 @@ namespace move_base {
     }
 
     return true;
+  }
+
+  // Added by us
+  geometry_msgs::Twist MoveBase::VelocityThresholding(geometry_msgs::Twist cmd_vel){
+    geometry_msgs::Twist cmd_vel_to_pub;
+    cmd_vel_to_pub = cmd_vel;
+
+    if(std::abs(cmd_vel.linear.x) > 0.09999 && std::abs(cmd_vel.linear.x) < 0.55 ){
+      if (cmd_vel.linear.x > 0) {
+        cmd_vel_to_pub.linear.x = 0.8;
+      }
+
+      else {
+        cmd_vel_to_pub.linear.x = -0.8;
+      }
+    };
+    
+    // Adjust rotational velocity
+    if (cmd_vel.angular.z >= 0.1 && 
+      cmd_vel_to_pub.angular.z <= 1.8  &&
+      cmd_vel_to_pub.linear.x <= 0.4) {
+      cmd_vel_to_pub.angular.z = 1.8;
+      // cmd_vel_to_pub.linear.x = 0;
+    } else if (cmd_vel.angular.z <= -0.1 && 
+      cmd_vel_to_pub.angular.z >= -1.8 &&
+      cmd_vel_to_pub.linear.x <= 0.4) {
+      cmd_vel_to_pub.angular.z = -1.8;
+      // cmd_vel_to_pub.linear.x = 0;
+    }
+    ROS_INFO_STREAM(cmd_vel_to_pub);
+
+    return cmd_vel_to_pub;   
   }
 };
